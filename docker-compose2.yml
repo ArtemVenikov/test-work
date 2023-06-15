@@ -1,0 +1,58 @@
+services:
+
+  wordpress:
+    image: wordpress:6.2
+    restart: always
+    env_file: ./.env
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: $MYSQL_USER
+      WORDPRESS_DB_PASSWORD: $MYSQL_PASSWORD
+      WORDPRESS_DB_NAME: wp_db
+    volumes:
+      - ./data/wp:/var/www/html
+    depends_on:
+      - db
+    networks:
+      - default
+
+  db:
+    image: mysql:5.7
+    restart: always
+    env_file: ./.env
+    environment:
+      MYSQL_DATABASE: wp_db
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 2s
+      retries: 10
+    networks:
+      - default
+
+  phpmyadmin:
+    image: phpmyadmin:5.2
+    environment:
+      PMA_HOST: db
+      PMA_ABSOLUTE_URI: http://localhost/phpmyadmin/
+    restart: always
+    depends_on:
+      - db
+    networks:
+      - default
+
+  webserver:
+    depends_on:
+      - wordpress
+    image: nginx:1.25
+    container_name: webserver
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./data/wp:/var/www/html
+      - ./nginx/2:/etc/nginx/conf.d
+    networks:
+      - default

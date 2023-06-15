@@ -1,0 +1,94 @@
+services:
+
+  wordpress:
+    image: wordpress:6.2
+    restart: always
+    env_file: ./.env
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: $MYSQL_USER
+      WORDPRESS_DB_PASSWORD: $MYSQL_PASSWORD
+      WORDPRESS_DB_NAME: wp_db
+    volumes:
+      - ./data/wp:/var/www/html
+    depends_on:
+      - db
+
+  db:
+    image: mysql:5.7
+    restart: always
+    env_file: ./.env
+    environment:
+      MYSQL_DATABASE: wp_db
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 2s
+      retries: 10
+
+
+  phpmyadmin:
+    image: phpmyadmin:5.2
+    environment:
+      PMA_HOST: db
+      PMA_ABSOLUTE_URI: http://localhost/phpmyadmin/
+    restart: always
+    depends_on:
+      - db
+
+
+  webserver:
+    depends_on:
+      - wordpress
+    image: nginx:1.25
+    container_name: webserver
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./data/wp:/var/www/html
+      - ./nginx/3:/etc/nginx/conf.d
+    
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+  
+  grafana:
+    restart: always
+    image: grafana/grafana
+    depends_on:
+      - prometheus
+    env_file: ./.env
+    # ports:
+    #   - 3000:3000
+    volumes:
+      - ./grafana/data:/var/lib/grafana
+      - ./grafana/:/etc/grafana/
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=$GRAFANA_PASSWORD
+      - GF_USERS_ALLOW_SIGN_UP=false
+
+  prometheus:
+    restart: always
+    image: prom/prometheus:v2.36.2
+    volumes:
+      - ./prometheus/:/etc/prometheus/
+      # - ./data/prometheus:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    # ports:
+    #   - 9090:9090
+ 
